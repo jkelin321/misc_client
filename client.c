@@ -14,11 +14,16 @@ void error(const char * msg){
 
 int main (int argc, char * argv[]){
 
-    int sockfd, portno, n;
-    struct sockaddr_in serv_addr;
-    struct hostent * server;
+    char fileBuffer[255];
 
-    char buffer[256];
+    int sockfd, portno, n;
+    struct sockaddr_in serv_addr; // <-- from netinet/in.h
+    struct hostent * server; // <-- from netdb.h , gethostbyname is techincally obsolete
+
+    FILE * fp = fopen("input.txt", "r");
+    if (fp == NULL)
+        return 1;
+    
     if (argc < 3) {
         fprintf(stderr, "usage %s hostname port \n", argv[0]);
         exit (1);
@@ -34,30 +39,31 @@ int main (int argc, char * argv[]){
         fprintf(stderr , "Error , no such host");
 
     memset((char *)&serv_addr, 0, sizeof(serv_addr));
-//    bzero((char *)&serv_addr, sizeof(serv_addr));    //         <-- swapped for troubleshooting
     serv_addr.sin_family = AF_INET;
     memmove((char *)&serv_addr.sin_addr.s_addr, (char *)server->h_addr, server->h_length);
-//    bcopy((char *)server->h_addr, (char *)&serv_addr.sin_addr.s_addr, server->h_length); //<-- swapped for troubleshooting
     serv_addr.sin_port = htons(portno);
     if (connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr))<0)
-        error("Connection Failed");
+       error("Connection Failed");
 
-    while(1){
-        memset(buffer, 0, 255);
-//        bzero(buffer, 255);//       <-- swapped for troubleshooting
-        fgets(buffer, 255, stdin);
-        n = write(sockfd, buffer, strlen(buffer));
+    while(1){ //TODO change if statement before n = write(..) to terminate if reutrns null / EOF. TODO strip \n off end of each file entry -- pass without \n to fpga
+        memset(fileBuffer, 0, 255 );
+
+        if (!fgets(fileBuffer, 255, fp)) // reads fp --> returns NULL if error / EOF
+            return 1;
+        fileBuffer[strlen(fileBuffer)-1] = '\0'; // overwrite the escape on each line to be \0 <-- don't wan't these landed on microblaze
+        n = write(sockfd, fileBuffer, strlen(fileBuffer));
+                                                      //    fgets(buffer, 255, stdin);  <--  "gets from file stream"
         if(n<0)
             error ("Error on writing");
 
-        memset(buffer, 0, 255);
-//        bzero(buffer, 255);//       <-- swapped for troubleshooting
-        n = read(sockfd , buffer , 255);
+        memset(fileBuffer, 0, 255); // clear buffer after writing 
+
+        n = read(sockfd , fileBuffer , 255);
         if (n<0)    
             error("Error on reading");
-        printf("Server: %s", buffer);
-        
-        int i = strncmp("Bye", buffer, 3);
+        printf("Server: %s\n\r", fileBuffer);
+                                    // would clear buffer again, but done at default of while loop
+        int i = strncmp("Bye", fileBuffer, 3);
         if(i == 0)
             break;
     }
